@@ -1,10 +1,11 @@
 /*
  * Lightweight ACPI Implementation
- * Copyright (C) 2018-2019 the lai authors
+ * Copyright (C) 2018-2020 the lai authors
  */
 
 #pragma once
 
+#include <lai/error.h>
 #include <lai/internal-util.h>
 
 #ifdef __cplusplus
@@ -74,6 +75,10 @@ typedef struct lai_nsnode
 
     lai_variable_t object;        // for Name()
 
+    // Implements the Notify() AML operator.
+    lai_api_error_t (*notify_override)(struct lai_nsnode *, int, void *);
+    void *notify_userptr;
+
     uint8_t method_flags;        // for Methods only, includes ARG_COUNT in lowest three bits
     // Allows the OS to override methods. Mainly useful for _OSI, _OS and _REV.
     int (*method_override)(lai_variable_t *args, lai_variable_t *result);
@@ -122,6 +127,12 @@ typedef struct lai_nsnode
             uint64_t op_length;
             const struct lai_opregion_override *op_override;
             void *op_userptr;
+        };
+        struct { // LAI_NAMESPACE_MUTEX
+            struct lai_sync_state mut_sync;
+        };
+        struct { // LAI_NAMESPACE_EVENT
+            struct lai_sync_state evt_sync;
         };
     };
 

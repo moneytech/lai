@@ -1,6 +1,6 @@
 /*
  * Lightweight ACPI Implementation
- * Copyright (C) 2018-2019 the lai authors
+ * Copyright (C) 2018-2020 the lai authors
  */
 
 #pragma once
@@ -45,10 +45,19 @@ typedef struct acpi_rsdp_t
     char oem[6];
     uint8_t revision;
     uint32_t rsdt;
+}__attribute__((packed)) acpi_rsdp_t;
+
+typedef struct acpi_xsdp_t
+{
+    char signature[8];
+    uint8_t checksum;
+    char oem[6];
+    uint8_t revision;
+    uint32_t rsdt;
     uint32_t length;
     uint64_t xsdt;
     uint8_t extended_checksum;
-}__attribute__((packed)) acpi_rsdp_t;
+}__attribute__((packed)) acpi_xsdp_t;
 
 typedef struct acpi_header_t
 {
@@ -68,6 +77,12 @@ typedef struct acpi_rsdt_t
     acpi_header_t header;
     uint32_t tables[];
 }__attribute__((packed)) acpi_rsdt_t;
+
+typedef struct acpi_xsdt_t
+{
+    acpi_header_t header;
+    uint64_t tables[];
+}__attribute__((packed)) acpi_xsdt_t;
 
 typedef struct acpi_gas_t
 {

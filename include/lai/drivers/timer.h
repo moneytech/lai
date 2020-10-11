@@ -11,8 +11,9 @@
 extern "C" {
 #endif
 
-lai_api_error_t lai_enter_sleep(uint8_t);
-lai_api_error_t lai_acpi_reset();
+lai_api_error_t lai_start_pm_timer();
+lai_api_error_t lai_stop_pm_timer();
+lai_api_error_t lai_busy_wait_pm_timer(uint64_t);
 
 #ifdef __cplusplus
 }

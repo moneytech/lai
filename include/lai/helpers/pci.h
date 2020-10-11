@@ -1,6 +1,6 @@
 /*
  * Lightweight ACPI Implementation
- * Copyright (C) 2018-2019 the lai authors
+ * Copyright (C) 2018-2020 the lai authors
  */
 
 #pragma once
@@ -31,7 +31,7 @@ struct lai_prt_iterator {
     uint8_t active_low;
 };
 
-#define LAI_PRT_ITERATOR_INITIALIZER(prt) {0, prt, 0, 0, 0, NULL, 0, 0, 0}
+#define LAI_PRT_ITERATOR_INITIALIZER(prt) {0, prt, 0, 0, 0, NULL, 0, 0, 0, 0}
 
 lai_api_error_t lai_pci_parse_prt(struct lai_prt_iterator *iter);
 

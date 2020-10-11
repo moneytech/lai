@@ -1,67 +1,67 @@
 /*
  * Lightweight ACPI Implementation
- * Copyright (C) 2018-2019 the lai authors
+ * Copyright (C) 2018-2020 the lai authors
  */
 
 #include <lai/core.h>
 #include "libc.h"
 #include "exec_impl.h"
+#include "aml_opcodes.h"
 
-int lai_create_string(lai_variable_t *object, size_t length) {
+lai_api_error_t lai_create_string(lai_variable_t *object, size_t length) {
     object->type = LAI_STRING;
     object->string_ptr = laihost_malloc(sizeof(struct lai_string_head));
     if (!object->string_ptr)
-        return 1;
+        return LAI_ERROR_OUT_OF_MEMORY;
     object->string_ptr->rc = 1;
     object->string_ptr->content = laihost_malloc(length + 1);
     if (!object->string_ptr->content) {
         laihost_free(object->string_ptr);
-        return 1;
+        return LAI_ERROR_OUT_OF_MEMORY;
     }
     memset(object->string_ptr->content, 0, length + 1);
-    return 0;
+    return LAI_ERROR_NONE;
 }
 
-int lai_create_c_string(lai_variable_t *object, const char *s) {
+lai_api_error_t lai_create_c_string(lai_variable_t *object, const char *s) {
     size_t n = lai_strlen(s);
-    int e;
-    e = lai_create_string(object, n);
-    if(e)
+    lai_api_error_t e = lai_create_string(object, n);
+    if(e != LAI_ERROR_NONE)
         return e;
     memcpy(lai_exec_string_access(object), s, n);
-    return 0;
+    return LAI_ERROR_NONE;
 }
 
-int lai_create_buffer(lai_variable_t *object, size_t size) {
+lai_api_error_t lai_create_buffer(lai_variable_t *object, size_t size) {
     object->type = LAI_BUFFER;
     object->buffer_ptr = laihost_malloc(sizeof(struct lai_buffer_head));
     if (!object->buffer_ptr)
-        return 1;
+        return LAI_ERROR_OUT_OF_MEMORY;
     object->buffer_ptr->rc = 1;
     object->buffer_ptr->size = size;
     object->buffer_ptr->content = laihost_malloc(size);
     if (!object->buffer_ptr->content) {
         laihost_free(object->buffer_ptr);
-        return 1;
+        return LAI_ERROR_OUT_OF_MEMORY;
     }
     memset(object->buffer_ptr->content, 0, size);
-    return 0;
+    return LAI_ERROR_NONE;
 }
 
-int lai_create_pkg(lai_variable_t *object, size_t n) {
+lai_api_error_t lai_create_pkg(lai_variable_t *object, size_t n) {
     object->type = LAI_PACKAGE;
     object->pkg_ptr = laihost_malloc(sizeof(struct lai_pkg_head));
     if (!object->pkg_ptr)
-        return 1;
+        return LAI_ERROR_OUT_OF_MEMORY;
     object->pkg_ptr->rc = 1;
     object->pkg_ptr->size = n;
     object->pkg_ptr->elems = laihost_malloc(n * sizeof(lai_variable_t));
     if (!object->pkg_ptr->elems) {
         laihost_free(object->pkg_ptr);
-        return 1;
+        return LAI_ERROR_OUT_OF_MEMORY;
     }
     memset(object->pkg_ptr->elems, 0, n * sizeof(lai_variable_t));
-    return 0;
+    return LAI_ERROR_NONE;
 }
 
 lai_api_error_t lai_obj_resize_string(lai_variable_t *object, size_t length) {
@@ -215,7 +215,7 @@ lai_api_error_t lai_obj_to_buffer(lai_variable_t *out, lai_variable_t *object){
     switch (object->type)
     {
     case LAI_TYPE_INTEGER:
-        if(lai_create_buffer(out, sizeof(uint64_t)))
+        if(lai_create_buffer(out, sizeof(uint64_t)) != LAI_ERROR_NONE)
             return LAI_ERROR_OUT_OF_MEMORY;
         memcpy(out->buffer_ptr->content, &object->integer, sizeof(uint64_t));
         break;
@@ -223,20 +223,20 @@ lai_api_error_t lai_obj_to_buffer(lai_variable_t *out, lai_variable_t *object){
     case LAI_TYPE_BUFFER:
         lai_obj_clone(out, object);
         break;
-    
+
     case LAI_TYPE_STRING: {
         size_t len = lai_exec_string_length(object);
         if(len == 0){
-            if(lai_create_buffer(out, 0))
+            if(lai_create_buffer(out, 0) != LAI_ERROR_NONE)
                 return LAI_ERROR_OUT_OF_MEMORY;
         } else {
-            if(lai_create_buffer(out, len + 1))
+            if(lai_create_buffer(out, len + 1) != LAI_ERROR_NONE)
                 return LAI_ERROR_OUT_OF_MEMORY;
             memcpy(out->buffer_ptr->content, object->string_ptr->content, len);
         }
         break;
     }
-    
+
     default:
         lai_warn("lai_obj_to_buffer() unsupported object type %d",
                    object->type);
@@ -302,14 +302,14 @@ lai_api_error_t lai_obj_to_string(lai_variable_t *out, lai_variable_t *object, s
         size_t buffer_length = 0;
         uint8_t *buffer = lai_exec_buffer_access(object);
         for(uint64_t i = 0; i < lai_exec_buffer_size(object); i++){
-            if(buffer[i] == '\0') 
+            if(buffer[i] == '\0')
                 break;
             buffer_length++;
         }
-        
+
         if(buffer_length == 0){
             lai_create_string(out, 0);
-        } else if(size == ~(uint64_t)(0)){
+        } else if(size == ~(size_t)(0)){
             // Copy until the '\0'
             lai_create_string(out, buffer_length + 1);
             char *string = lai_exec_string_access(out);
@@ -324,11 +324,11 @@ lai_api_error_t lai_obj_to_string(lai_variable_t *out, lai_variable_t *object, s
                 char *string = lai_exec_string_access(out);
                 memcpy(string, buffer, buffer_length);
             }
-            
+
         }
         break;
     }
-    
+
     default:
         lai_warn("lai_obj_to_string() unsupported object type %d",
                    object->type);
@@ -341,6 +341,13 @@ lai_api_error_t lai_obj_to_string(lai_variable_t *out, lai_variable_t *object, s
 lai_api_error_t lai_obj_to_decimal_string(lai_variable_t *out, lai_variable_t *object){
     switch (object->type)
     {
+    case LAI_INTEGER: {
+        lai_create_string(out, 20); // Max length for 64-bit integer is 20 chars
+        char *s = lai_exec_string_access(out);
+        lai_snprintf(s, 21, "%llu", object->integer);// snprintf null terminates
+        break;
+    }
+
     case LAI_BUFFER: {
         size_t buffer_len = lai_exec_buffer_size(object);
         uint8_t *buffer = lai_exec_buffer_access(object);
@@ -366,7 +373,7 @@ lai_api_error_t lai_obj_to_decimal_string(lai_variable_t *out, lai_variable_t *o
     case LAI_STRING:
         lai_obj_clone(out, object);
         break;
-    
+
     default:
         lai_warn("lai_obj_to_decimal_string() unsupported object type %d",
                    object->type);
@@ -380,6 +387,13 @@ lai_api_error_t lai_obj_to_decimal_string(lai_variable_t *out, lai_variable_t *o
 lai_api_error_t lai_obj_to_hex_string(lai_variable_t *out, lai_variable_t *object){
     switch (object->type)
     {
+    case LAI_INTEGER: {
+        lai_create_string(out, 16); // 64-bit integer is 8 bytes, each byte takes 2 chars, is 16 chars
+        char *s = lai_exec_string_access(out);
+        lai_snprintf(s, 17, "%X", object->integer); // snprintf null terminates
+        break;
+    }
+
     case LAI_BUFFER: {
         size_t buffer_len = lai_exec_buffer_size(object);
         uint8_t *buffer = lai_exec_buffer_access(object);
@@ -408,9 +422,9 @@ lai_api_error_t lai_obj_to_hex_string(lai_variable_t *out, lai_variable_t *objec
     case LAI_STRING:
         lai_obj_clone(out, object);
         break;
-    
+
     default:
-        lai_warn("lai_obj_to_decimal_string() unsupported object type %d",
+        lai_warn("lai_obj_to_hex_string() unsupported object type %d",
                    object->type);
         return LAI_ERROR_ILLEGAL_ARGUMENTS;
     }
@@ -426,7 +440,7 @@ lai_api_error_t lai_mutate_string(lai_variable_t *target, lai_variable_t *object
         case LAI_TYPE_STRING: {
             size_t length = lai_strlen(lai_exec_string_access(object));
             if (lai_obj_resize_string(target, length))
-                lai_panic("could not resize string in lai_exec_mutate_ns()");
+                lai_panic("could not resize string in lai_mutate_string()");
             lai_strcpy(lai_exec_string_access(target),
                    lai_exec_string_access(object));
             break;
@@ -436,7 +450,7 @@ lai_api_error_t lai_mutate_string(lai_variable_t *target, lai_variable_t *object
             // Need space for 16 hex digits + one null-terminator.
             // TODO: This depends on the integer width.
             if (lai_obj_resize_string(target, 17))
-                lai_panic("could not resize string in lai_exec_mutate_ns()");
+                lai_panic("could not resize string in lai_mutate_string()");
             char *s = lai_exec_string_access(target);
 
             lai_snprintf(s, 17, "%016lX", object->integer);
@@ -676,7 +690,7 @@ lai_api_error_t lai_mutate_integer(lai_variable_t *target, lai_variable_t *objec
 // lai_clone_buffer(): Clones a buffer object
 static void lai_clone_buffer(lai_variable_t *dest, lai_variable_t *source) {
     size_t size = lai_exec_buffer_size(source);
-    if (lai_create_buffer(dest, size))
+    if (lai_create_buffer(dest, size) != LAI_ERROR_NONE)
         lai_panic("unable to allocate memory for buffer object.");
     memcpy(lai_exec_buffer_access(dest), lai_exec_buffer_access(source), size);
 }
@@ -684,7 +698,7 @@ static void lai_clone_buffer(lai_variable_t *dest, lai_variable_t *source) {
 // lai_clone_string(): Clones a string object
 static void lai_clone_string(lai_variable_t *dest, lai_variable_t *source) {
     size_t n = lai_exec_string_length(source);
-    if (lai_create_string(dest, n))
+    if (lai_create_string(dest, n) != LAI_ERROR_NONE)
         lai_panic("unable to allocate memory for string object.");
     memcpy(lai_exec_string_access(dest), lai_exec_string_access(source), n);
 }
@@ -692,11 +706,13 @@ static void lai_clone_string(lai_variable_t *dest, lai_variable_t *source) {
 // lai_clone_package(): Clones a package object
 static void lai_clone_package(lai_variable_t *dest, lai_variable_t *src) {
     size_t n = src->pkg_ptr->size;
-    if (lai_create_pkg(dest, n))
+    if (lai_create_pkg(dest, n) != LAI_ERROR_NONE)
         lai_panic("unable to allocate memory for package object.");
-    for (int i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++)
         lai_obj_clone(&dest->pkg_ptr->elems[i], &src->pkg_ptr->elems[i]);
 }
+
+extern void lai_swap_object(lai_variable_t *first, lai_variable_t *second); // from core/variable.c
 
 // lai_obj_clone(): Copies an object
 void lai_obj_clone(lai_variable_t *dest, lai_variable_t *source) {
@@ -773,4 +789,123 @@ int lai_objecttype_ns(lai_nsnode_t* node){
             break;
     }
     return 0;
+}
+
+lai_api_error_t lai_obj_exec_match_op(int op, lai_variable_t* var, lai_variable_t* obj, int* out){
+    LAI_CLEANUP_VAR lai_variable_t compare_obj = LAI_VAR_INITIALIZER;
+    int result = 0;
+
+    if(var->type == LAI_INTEGER) {
+        lai_api_error_t err = lai_obj_to_integer(&compare_obj, obj);
+        if(err != LAI_ERROR_NONE)
+            return err;
+
+        switch (op) {
+            case MATCH_MTR: // MTR: Always True
+                result = 1;
+                break;
+            case MATCH_MEQ: // MEQ: Equals
+                result = (var->integer == compare_obj.integer);
+                break;
+            case MATCH_MLE: // MLE: Less than or equal
+                result = (var->integer <= compare_obj.integer);
+                break;
+            case MATCH_MLT: // MLT: Less than
+                result = (var->integer < compare_obj.integer);
+                break;
+            case MATCH_MGE: // MGE: Greater than or equal
+                result = (var->integer >= compare_obj.integer);
+                break;
+            case MATCH_MGT: // MGT: Greater than
+                result = (var->integer > compare_obj.integer);
+                break;
+        
+            default:
+                lai_warn("lai_obj_exec_match_op: Illegal op passed %d", op);
+                return LAI_ERROR_UNEXPECTED_RESULT;
+        }
+    } else if (var->type == LAI_BUFFER || var->type == LAI_STRING) {
+        char* var_data = NULL;
+        char* obj_data = NULL;
+
+        size_t var_size = 0;
+        size_t obj_size = 0;
+
+        if(var->type == LAI_BUFFER) {
+            lai_api_error_t err = lai_obj_to_buffer(&compare_obj, obj);
+            if(err != LAI_ERROR_NONE)
+                return err;
+            
+            var_data = lai_exec_buffer_access(var);
+            obj_data = lai_exec_buffer_access(&compare_obj);
+
+            var_size = lai_exec_buffer_size(var);
+            obj_size = lai_exec_buffer_size(&compare_obj);
+        } else {
+            lai_api_error_t err = lai_obj_to_hex_string(&compare_obj, obj);
+            if(err != LAI_ERROR_NONE)
+                return err;
+            
+            var_data = lai_exec_string_access(var);
+            obj_data = lai_exec_string_access(&compare_obj);
+
+            var_size = lai_exec_string_length(var);
+            obj_size = lai_exec_string_length(&compare_obj);
+        }
+
+        int compare = memcmp(var_data, obj_data, (var_size > obj_size) ? obj_size : var_size);
+
+        switch (op) {
+            case MATCH_MTR: // MTR: Always True
+                result = 1;
+                break;
+            case MATCH_MEQ: // MEQ: Equals
+                result = (result == 0 && var_size == obj_size);
+                break;
+            case MATCH_MLE: // MLE: Less than or equal
+                if (compare == 0){
+                    result = var_size > obj_size;
+                } else {
+                    result = (compare > 0);
+                }
+
+                result = !result; // (a <= b) = !(a > b) 
+                break;
+            case MATCH_MLT: // MLT: Less than
+                if (compare == 0){
+                    result = var_size < obj_size;
+                } else {
+                    result = (compare < 0);
+                }
+
+                break;
+            case MATCH_MGE: // MGE: Greater than or equal
+                if (compare == 0){
+                    result = var_size < obj_size;
+                } else {
+                    result = (compare < 0);
+                }
+
+                result = !result; // (a >= 0) = !(a < b);
+                break;
+            case MATCH_MGT: // MGT: Greater than
+                if (compare == 0){
+                    result = var_size > obj_size;
+                } else {
+                    result = (compare > 0);
+                }
+
+                break;
+            default:
+                lai_warn("lai_obj_exec_match_op: Illegal op passed %d", op);
+                return LAI_ERROR_UNEXPECTED_RESULT;
+        }
+    } else {
+        lai_warn("lai_obj_exec_match_op: Illegal object type passed %d", var->type);
+        return LAI_ERROR_UNEXPECTED_RESULT;
+    }
+
+    *out = result;
+
+    return LAI_ERROR_NONE;
 }

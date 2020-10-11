@@ -1,7 +1,7 @@
 
 /*
  * Lightweight ACPI Implementation
- * Copyright (C) 2018-2019 the lai authors
+ * Copyright (C) 2018-2020 the lai authors
  */
 
 #pragma once
@@ -20,6 +20,7 @@
 #define PACKAGE_OP			0x12
 #define VARPACKAGE_OP			0x13
 #define METHOD_OP			0x14
+#define EXTERNAL_OP         0x15
 #define DUAL_PREFIX			0x2E
 #define MULTI_PREFIX			0x2F
 #define EXTOP_PREFIX			0x5B
@@ -58,8 +59,12 @@
 #define FINDSETLEFTBIT_OP   0x81
 #define FINDSETRIGHTBIT_OP  0x82
 #define DEREF_OP			0x83
+#define CONCATRES_OP        0x84
+#define MOD_OP              0x85
+#define NOTIFY_OP           0x86
 #define SIZEOF_OP			0x87
 #define INDEX_OP			0x88
+#define MATCH_OP            0x89
 #define DWORDFIELD_OP			0x8A
 #define WORDFIELD_OP			0x8B
 #define BYTEFIELD_OP			0x8C
@@ -96,8 +101,12 @@
 #define SLEEP_OP			0x22
 #define ACQUIRE_OP			0x23
 #define RELEASE_OP			0x27
+#define SIGNAL_OP           0x24
+#define WAIT_OP             0x25
+#define RESET_OP            0x26
 #define FROM_BCD_OP         0x28
 #define TO_BCD_OP           0x29
+#define REVISION_OP         0x30
 #define DEBUG_OP			0x31
 #define FATAL_OP            0x32
 #define OPREGION			0x80
@@ -123,3 +132,11 @@
 // Methods
 #define METHOD_ARGC_MASK		0x07
 #define METHOD_SERIALIZED		0x08
+
+// Match Comparison Type
+#define MATCH_MTR               0x0
+#define MATCH_MEQ               0x1
+#define MATCH_MLE               0x2
+#define MATCH_MLT               0x3
+#define MATCH_MGE               0x4
+#define MATCH_MGT               0x5

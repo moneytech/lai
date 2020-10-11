@@ -1,7 +1,7 @@
 
 /*
  * Lightweight ACPI Implementation
- * Copyright (C) 2018-2019 the lai authors
+ * Copyright (C) 2018-2020 the lai authors
  */
 
 /* Generic ACPI Namespace Management */
@@ -229,7 +229,7 @@ char *lai_stringify_amlname(const struct lai_amlname *in_amln) {
         }
     }
     str[n++] = '\0';
-    LAI_ENSURE(n <= max_length);
+    LAI_ENSURE(n <= (int) max_length);
     return str;
 }
 
@@ -488,6 +488,9 @@ void lai_create_namespace(void) {
 
     // Load the DSDT.
     void *dsdt_table = laihost_scan("DSDT", 0);
+    if (!dsdt_table)
+        lai_panic("unable to find ACPI DSDT.");
+    
     void *dsdt_amls = lai_load_table(dsdt_table, 0);
     lai_init_state(&state);
     lai_populate(root_node, dsdt_amls, &state);
@@ -661,7 +664,7 @@ int lai_check_device_pnp_id(lai_nsnode_t *dev, lai_variable_t *pnp_id,
         }
     } else if (id.type == LAI_STRING && pnp_id->type == LAI_STRING) {
         if (!lai_strcmp(lai_exec_string_access(&id),
-                         lai_exec_string_access(pnp_id))) {    
+                         lai_exec_string_access(pnp_id))) {
             ret = 0;
         }
     }
@@ -683,7 +686,7 @@ lai_nsnode_t *lai_ns_iterate(struct lai_ns_iterator *iter) {
 }
 
 lai_nsnode_t *lai_ns_child_iterate(struct lai_ns_child_iterator *iter) {
-    while (iter->i < iter->parent->children.elem_capacity) {
+    while (iter->i < (size_t) iter->parent->children.elem_capacity) {
         lai_nsnode_t *n = iter->parent->children.elem_ptr_tab[iter->i++];
         if (n)
             return n;
@@ -692,15 +695,19 @@ lai_nsnode_t *lai_ns_child_iterate(struct lai_ns_child_iterator *iter) {
     return NULL;
 }
 
-lai_api_error_t lai_ns_override_opregion(lai_nsnode_t *node, const struct lai_opregion_override *override, void *userptr){
-    if(node == NULL){
-        lai_warn("node passed to lai_ns_override_opregion is NULL");
-        return LAI_ERROR_ILLEGAL_ARGUMENTS;
-    }
-    if(node->type != LAI_NAMESPACE_OPREGION){
-        lai_warn("Tried to override opregion functions for non-opregion");
-        return LAI_ERROR_TYPE_MISMATCH;
-    }
+lai_api_error_t lai_ns_override_notify(lai_nsnode_t *node,
+        lai_api_error_t (*override)(lai_nsnode_t *, int, void *), void *userptr) {
+    LAI_ENSURE(node);
+
+    node->notify_override = override;
+    node->notify_userptr = userptr;
+    return LAI_ERROR_NONE;
+}
+
+lai_api_error_t lai_ns_override_opregion(lai_nsnode_t *node,
+        const struct lai_opregion_override *override, void *userptr){
+    LAI_ENSURE(node);
+    LAI_ENSURE(node->type == LAI_NAMESPACE_OPREGION);
 
     node->op_override = override;
     node->op_userptr = userptr;
@@ -708,9 +715,9 @@ lai_api_error_t lai_ns_override_opregion(lai_nsnode_t *node, const struct lai_op
 }
 
 enum lai_node_type lai_ns_get_node_type(lai_nsnode_t *node){
-    if(node == NULL){
+    if(!node){
         lai_warn("node passed to lai_ns_get_node_type is NULL");
-        return LAI_ERROR_ILLEGAL_ARGUMENTS;
+        return LAI_NODETYPE_NULL;
     }
 
     switch (node->type){
@@ -744,7 +751,6 @@ enum lai_node_type lai_ns_get_node_type(lai_nsnode_t *node){
         return LAI_NODETYPE_OPREGION;
     default:
         return LAI_NODETYPE_NULL;
-        break;
     }
 }
 

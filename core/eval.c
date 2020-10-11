@@ -1,6 +1,6 @@
 /*
  * Lightweight ACPI Implementation
- * Copyright (C) 2018-2019 the lai authors
+ * Copyright (C) 2018-2020 the lai authors
  */
 
 #include <lai/core.h>
@@ -67,7 +67,7 @@ uint8_t char_to_hex(char character) {
 void lai_eisaid(lai_variable_t *object, const char *id) {
     size_t n = lai_strlen(id);
     if (lai_strlen(id) != 7) {
-        if(lai_create_string(object, n))
+        if(lai_create_string(object, n) != LAI_ERROR_NONE)
             lai_panic("could not allocate memory for string");
         memcpy(lai_exec_string_access(object), id, n);
         return;

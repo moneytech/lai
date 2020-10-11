@@ -1,6 +1,6 @@
 /*
  * Lightweight ACPI Implementation
- * Copyright (C) 2018-2019 the lai authors
+ * Copyright (C) 2018-2020 the lai authors
  */
 
 #pragma once
@@ -12,6 +12,7 @@
 #include <acpispec/resources.h>
 #include <acpispec/hw.h>
 #include <acpispec/tables.h>
+#include <lai/error.h>
 #include <lai/host.h>
 #include <lai/internal-exec.h>
 #include <lai/internal-ns.h>
@@ -21,27 +22,9 @@
 extern "C" {
 #endif
 
+#define LAI_REVISION    0x20200712
+
 #define ACPI_MAX_RESOURCES          512
-
-typedef enum lai_api_error {
-    LAI_ERROR_NONE,
-    LAI_ERROR_OUT_OF_MEMORY,
-    LAI_ERROR_TYPE_MISMATCH,
-    LAI_ERROR_NO_SUCH_NODE,
-    LAI_ERROR_OUT_OF_BOUNDS,
-    LAI_ERROR_EXECUTION_FAILURE,
-    LAI_ERROR_ILLEGAL_ARGUMENTS,
-
-    /* Evaluating external inputs (e.g., nodes of the ACPI namespace) returned an unexpected result.
-     * Unlike LAI_ERROR_EXECUTION_FAILURE, this error does not indicate that
-     * execution of AML failed; instead, the resulting object fails to satisfy some
-     * expectation (e.g., it is of the wrong type, has an unexpected size, or consists of
-     * unexpected contents) */
-    LAI_ERROR_UNEXPECTED_RESULT,
-    // Error given when end of iterator is reached, nothing to worry about
-    LAI_ERROR_END_REACHED,
-    LAI_ERROR_UNSUPPORTED,
-} lai_api_error_t;
 
 // Convert a lai_api_error_t to a human readable string
 const char *lai_api_error_to_string(lai_api_error_t);
@@ -99,7 +82,10 @@ lai_nsnode_t *lai_ns_child_iterate(struct lai_ns_child_iterator *);
 lai_nsnode_t *lai_ns_get_root();
 lai_nsnode_t *lai_ns_get_parent(lai_nsnode_t *node);
 lai_nsnode_t *lai_ns_get_child(lai_nsnode_t *parent, const char *name);
-lai_api_error_t lai_ns_override_opregion(lai_nsnode_t *node, const struct lai_opregion_override *override, void *userptr);
+lai_api_error_t lai_ns_override_notify(lai_nsnode_t *node,
+        lai_api_error_t (*override)(lai_nsnode_t *, int, void *), void *userptr);
+lai_api_error_t lai_ns_override_opregion(lai_nsnode_t *node,
+        const struct lai_opregion_override *override, void *userptr);
 enum lai_node_type lai_ns_get_node_type(lai_nsnode_t *node);
 
 uint8_t lai_ns_get_opregion_address_space(lai_nsnode_t *node);
@@ -114,6 +100,11 @@ enum lai_object_type {
     LAI_TYPE_PACKAGE,
     LAI_TYPE_DEVICE,
 };
+
+lai_api_error_t lai_create_string(lai_variable_t *, size_t);
+lai_api_error_t lai_create_c_string(lai_variable_t *, const char *);
+lai_api_error_t lai_create_buffer(lai_variable_t *, size_t);
+lai_api_error_t lai_create_pkg(lai_variable_t *, size_t);
 
 enum lai_object_type lai_obj_get_type(lai_variable_t *object);
 lai_api_error_t lai_obj_get_integer(lai_variable_t *, uint64_t *);
@@ -137,6 +128,8 @@ void lai_obj_clone(lai_variable_t *, lai_variable_t *);
 
 int lai_objecttype_ns(lai_nsnode_t*);
 int lai_objecttype_obj(lai_variable_t*);
+
+lai_api_error_t lai_obj_exec_match_op(int, lai_variable_t*, lai_variable_t*, int*);
 
 #define LAI_CLEANUP_VAR __attribute__((cleanup(lai_var_finalize)))
 #define LAI_VAR_INITIALIZER {0}

@@ -1,10 +1,11 @@
 
 /*
  * Lightweight ACPI Implementation
- * Copyright (C) 2018-2019 the lai authors
+ * Copyright (C) 2018-2020 the lai authors
  */
 
 #include <lai/core.h>
+#include "util-macros.h"
 #include "exec_impl.h"
 #include "libc.h"
 
@@ -23,7 +24,7 @@ static const char *supported_osi_strings[] = {
     "Windows 2009",        /* Windows 7 */
     "Windows 2012",        /* Windows 8 */
     "Windows 2013",        /* Windows 8.1 */
-    "Windows 2015",        /* Windows 10 */
+    "Windows 2015"         /* Windows 10 */
 };
 
 // Pretend to be windows when we execute the OSI() method.
@@ -31,7 +32,7 @@ int lai_do_osi_method(lai_variable_t *args, lai_variable_t *result) {
     const char *query = lai_exec_string_access(&args[0]);
 
     uint32_t osi_return = 0;
-    for (size_t i = 0; i < (sizeof(supported_osi_strings) / sizeof(uint64_t)); i++) {
+    for (size_t i = 0; i < LAI_SIZEOF_ARRAY(supported_osi_strings); i++) {
         if (!lai_strcmp(query, supported_osi_strings[i])) {
             osi_return = 0xFFFFFFFF;
             break;
@@ -50,13 +51,15 @@ int lai_do_osi_method(lai_variable_t *args, lai_variable_t *result) {
 
 // same for both of the functions below.
 int lai_do_os_method(lai_variable_t *args, lai_variable_t *result) {
-    if (lai_create_c_string(result, lai_emulated_os))
+    (void) args;
+    if (lai_create_c_string(result, lai_emulated_os) != LAI_ERROR_NONE)
         lai_panic("could not allocate memory for string");
     lai_debug("_OS_ returned '%s'", lai_emulated_os);
     return 0;
 }
 
 int lai_do_rev_method(lai_variable_t *args, lai_variable_t *result) {
+    (void) args;
     result->type = LAI_INTEGER;
     result->integer = lai_implemented_version;
 

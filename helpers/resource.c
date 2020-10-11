@@ -1,7 +1,7 @@
 
 /*
  * Lightweight ACPI Implementation
- * Copyright (C) 2018-2019 the lai authors
+ * Copyright (C) 2018-2020 the lai authors
  */
 
 /* ACPI Resource Template Implementation */
@@ -186,7 +186,7 @@ lai_api_error_t lai_resource_iterate(struct lai_resource_view *iterator){
             return LAI_ERROR_NONE;
         case ACPI_LARGE_FIXED_MEM32:
             iterator->flags = entry[3];
-            iterator->base = (entry[4] | (entry[5] << 8) | (entry[6] << 16) | (entry[7] << 24));
+            iterator->base = (entry[4] | (entry[5] << 8) | (entry[6] << 16) | (entry[7] << 24)) & 0xFFFFFFFF;
             iterator->length = (entry[8] | (entry[9] << 8) | (entry[10] << 16) | (entry[11] << 24));
             iterator->skip_size = info.skip_size;
             return LAI_ERROR_NONE;

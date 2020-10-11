@@ -1,7 +1,7 @@
 
 /*
  * Lightweight ACPI Implementation
- * Copyright (C) 2018-2019 the lai authors
+ * Copyright (C) 2018-2020 the lai authors
  */
 
 // Internal header file. Do not use outside of LAI.
@@ -84,12 +84,6 @@ static const uint32_t lai_mode_flags[] = {
     [LAI_OPTIONAL_REFERENCE_MODE] = LAI_MF_RESULT | LAI_MF_RESOLVE | LAI_MF_NULLABLE,
 };
 
-// Allocate a new package.
-int lai_create_string(lai_variable_t *, size_t);
-int lai_create_c_string(lai_variable_t *, const char *);
-int lai_create_buffer(lai_variable_t *, size_t);
-int lai_create_pkg(lai_variable_t *, size_t);
-
 void lai_exec_ref_load(lai_variable_t *, lai_variable_t *);
 void lai_exec_ref_store(lai_variable_t *, lai_variable_t *);
 
@@ -103,6 +97,130 @@ void lai_operand_emplace(lai_state_t *, struct lai_operand *, lai_variable_t *);
 
 void lai_exec_get_objectref(lai_state_t *, struct lai_operand *, lai_variable_t *);
 void lai_exec_get_integer(lai_state_t *, struct lai_operand *, lai_variable_t *);
+
+// --------------------------------------------------------------------------------------
+// Synchronization functions.
+// --------------------------------------------------------------------------------------
+
+#define LAI_MUTEX_BITS      3u
+#define LAI_MUTEX_LOCKED    1u
+#define LAI_MUTEX_CONTENDED 2u
+
+static inline int lai_mutex_lock(struct lai_sync_state *sync, int64_t deadline) {
+    unsigned int v = __atomic_load_n(&sync->val, __ATOMIC_RELAXED);
+    for (;;) {
+        LAI_ENSURE(!(v & ~LAI_MUTEX_BITS));
+
+        if(!(v & LAI_MUTEX_LOCKED)) {
+            // Try to lock the mutex.
+            if(__atomic_compare_exchange_n(&sync->val, &v,
+                    LAI_MUTEX_LOCKED, 0,
+                    __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
+                return 0;
+        }else{
+            // Try to switch the mutex to contended state.
+            if(!(v & LAI_MUTEX_CONTENDED)) {
+                if(!__atomic_compare_exchange_n(&sync->val, &v,
+                        LAI_MUTEX_LOCKED | LAI_MUTEX_CONTENDED, 0,
+                        __ATOMIC_RELAXED, __ATOMIC_RELAXED))
+                    continue;
+            }
+
+            // Block this thread.
+            if(!laihost_sync_wait)
+                lai_panic("laihost_sync_wait() is needed to lock contended mutex");
+            if(laihost_sync_wait(sync, LAI_MUTEX_LOCKED | LAI_MUTEX_CONTENDED, deadline))
+                return 1;
+        }
+    }
+}
+
+static inline void lai_mutex_unlock(struct lai_sync_state *sync) {
+    unsigned int v = __atomic_exchange_n(&sync->val, 0, __ATOMIC_RELEASE);
+    LAI_ENSURE(!(v & ~LAI_MUTEX_BITS));
+    LAI_ENSURE(v & LAI_MUTEX_LOCKED);
+
+    if(v & LAI_MUTEX_CONTENDED) {
+        if(!laihost_sync_wake)
+            lai_panic("laihost_sync_wake() is needed to unlock contended mutex");
+        laihost_sync_wake(sync);
+    }
+}
+
+#define LAI_EVENT_COUNT   0x7FFFFFFFu
+#define LAI_EVENT_WAITERS 0x80000000u
+
+static inline int lai_event_wait(struct lai_sync_state *sync, int64_t deadline) {
+    unsigned int v = __atomic_load_n(&sync->val, __ATOMIC_RELAXED);
+    for (;;) {
+        if (v & LAI_EVENT_COUNT) {
+            LAI_ENSURE(!(v & LAI_EVENT_WAITERS));
+
+            // Decrement the event count.
+            if (__atomic_compare_exchange_n(&sync->val, &v, v - 1, 0,
+                    __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
+                return 0;
+        } else {
+            // Try to set the waiters bit.
+            if (!(v & LAI_EVENT_WAITERS)) {
+                if (!__atomic_compare_exchange_n(&sync->val, &v, LAI_EVENT_WAITERS, 0,
+                        __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
+                    continue;
+            }
+
+            // Block this thread.
+            if(!laihost_sync_wait)
+                lai_panic("laihost_sync_wait() is needed to wait for contended event");
+            if(laihost_sync_wait(sync, LAI_MUTEX_LOCKED | LAI_MUTEX_CONTENDED, deadline))
+                return 1;
+        }
+    }
+}
+
+static inline void lai_event_signal(struct lai_sync_state *sync) {
+    unsigned int v = __atomic_load_n(&sync->val, __ATOMIC_RELAXED);
+    for (;;) {
+        if (!(v & LAI_EVENT_WAITERS)) {
+            // Increment the event count.
+            LAI_ENSURE(!((v + 1) & ~LAI_EVENT_COUNT)); // Avoid overflows.
+            if (__atomic_compare_exchange_n(&sync->val, &v, v + 1, 0,
+                    __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
+                return;
+        } else {
+            LAI_ENSURE(!(v & LAI_EVENT_COUNT));
+
+            // Try to unset the waiters bit.
+            if (!__atomic_compare_exchange_n(&sync->val, &v, 1, 0,
+                    __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
+                continue;
+
+            // Unblock a waiter.
+            if(!laihost_sync_wake)
+                lai_panic("laihost_sync_wake() is needed to signal contended event");
+            laihost_sync_wake(sync);
+            return;
+        }
+    }
+}
+
+static inline void lai_event_reset(struct lai_sync_state *sync) {
+    unsigned int v = __atomic_load_n(&sync->val, __ATOMIC_RELAXED);
+    for (;;) {
+        if (!(v & LAI_EVENT_WAITERS)) {
+            // Try to reset the event count to zero.
+            if (v & LAI_EVENT_COUNT) {
+                if (!__atomic_compare_exchange_n(&sync->val, &v, 0, 0,
+                        __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
+                    continue;
+            }
+        } else {
+            LAI_ENSURE(!(v & LAI_EVENT_COUNT));
+        }
+
+        // The event count must be zero here (in both cases).
+        return;
+    }
+}
 
 // --------------------------------------------------------------------------------------
 // Inline function for context stack manipulation.

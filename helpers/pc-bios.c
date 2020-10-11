@@ -1,6 +1,6 @@
 /*
  * Lightweight ACPI Implementation
- * Copyright (C) 2018-2019 the lai authors
+ * Copyright (C) 2018-2020 the lai authors
  */
 
 #include <acpispec/tables.h>
@@ -23,29 +23,48 @@ lai_api_error_t lai_bios_detect_rsdp_within(uintptr_t base, size_t length,
 
         if (memcmp(rsdp->signature, "RSD PTR ", 8))
             continue;
+        
         if (lai_bios_calc_checksum(rsdp, sizeof(acpi_rsdp_t)))
             continue;
 
-        // TODO: Handle XSDTs and support ACPI 2 detection.
-        info->acpi_version = 1;
         info->rsdp_address = base + off;
-        info->rsdt_address = rsdp->rsdt;
-        e = LAI_ERROR_NONE;
-        goto done;
+        if(!rsdp->revision){
+            info->acpi_version = 1;
+            
+            info->rsdt_address = rsdp->rsdt;
+            info->xsdt_address = 0;
+            e = LAI_ERROR_NONE;
+            goto done;
+        } else {
+            acpi_xsdp_t *xsdp = (acpi_xsdp_t *)rsdp;
+
+            if(lai_bios_calc_checksum(xsdp, sizeof(acpi_xsdp_t)))
+                continue;
+
+            info->acpi_version = 2;
+            info->rsdt_address = 0;
+            info->xsdt_address = xsdp->xsdt;
+            e = LAI_ERROR_NONE;
+            goto done;
+        }
     }
 
 done:
-    // TODO: Unmap the memory range.
+    laihost_unmap(window, length);
     return e;
 }
 
 lai_api_error_t lai_bios_detect_rsdp(struct lai_rsdp_info *info) {
     int e;
 
+    if(!laihost_map || !laihost_unmap)
+        lai_panic("lai_bios_detect_rsdp() needs laihost_map() and laihost_unmap()");
+
     // ACPI specifies that we can find the EBDA through 0x40E.
     uint16_t bda_data;
     void *bda_window = laihost_map(0x40E, sizeof(uint16_t));
     memcpy(&bda_data, bda_window, sizeof(uint16_t));
+    laihost_unmap(bda_window, sizeof(uint16_t));
 
     uintptr_t ebda_base = ((uintptr_t)bda_data) << 4;
 

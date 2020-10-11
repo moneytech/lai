@@ -1,6 +1,6 @@
 /*
  * Lightweight ACPI Implementation
- * Copyright (C) 2018-2019 the lai authors
+ * Copyright (C) 2018-2020 the lai authors
  */
 
 #pragma once
@@ -29,6 +29,9 @@ extern "C" {
 #define ACPI_EC_STATUS_BURST   0x10 // Temporarily halts normal processing so multiple commands can be processed
 #define ACPI_EC_STATUS_SCI_EVT 0x20 // SCI event pending
 #define ACPI_EC_STATUS_SMI_EVT 0x40 // SMI event pending
+
+#define ACPI_PCI_ROOT_BUS_PNP_ID        "PNP0A03"
+#define ACPI_PCIE_ROOT_BUS_PNP_ID       "PNP0A08"
 
 #ifdef __cplusplus
 }

@@ -1,7 +1,7 @@
 
 /*
  * Lightweight ACPI Implementation
- * Copyright (C) 2018-2019 the lai authors
+ * Copyright (C) 2018-2020 the lai authors
  */
 
 /* System Control Interrupt Initialization */
@@ -137,6 +137,7 @@ int lai_disable_acpi(void){
     laihost_outb(instance->fadt->smi_command_port, instance->fadt->acpi_disable);
 
     lai_debug("Success");
+    return 0;
 }
 
 int lai_evaluate_sta(lai_nsnode_t *node) {
